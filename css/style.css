@@ -1,0 +1,40 @@
+
+html {
+  height: 100%;
+}
+body {
+  position: absolute;
+  height: 100%;
+  width: 100%;
+  overflow: hidden;
+  margin: 0px;
+  padding: 0px;
+  background: #202020;
+}
+#terminal {
+  display: block;
+  position: fixed;
+  top: 62px;
+  bottom: 0%;
+  width: 100%;
+}
+
+#connection-panel {
+  background: transparent;
+}
+
+#clientConnectButton {
+  position:fixed;
+  background-color: #365041;
+  border: none;
+  border-radius: 8px;
+  width: 120px;
+  height: 32px;
+  color: white;
+  text-align: center;
+  text-decoration: none;
+  font-size: 16px;
+  left: 15px;
+  top: 15px;
+  cursor: pointer;
+}
