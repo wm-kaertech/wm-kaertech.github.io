@@ -45,6 +45,7 @@ function connect() {
             //{ services: ['6B978498-A66F-11EB-BCBC-0242AC130002'] },
             { namePrefix: 'Storyphone' }
         ],
+        optionalServices: [bleUartServiceUUID],
     })
         .then(device => {
             bleDevice = device;

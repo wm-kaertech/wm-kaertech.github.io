@@ -751,10 +751,10 @@ lib.colors.nameToRGB = function (name) {
  */
 lib.colors.stockColorPalette = lib.colors.hexToRGB
   ([// The "ANSI 16"...
-    '#ABB2BF', '#E06C75', '#98C379', '#D19A66',
-    '#61AFEF', '#D19A66', '#56B6C2', '#ABB2BF',
-    '#ABB2BF', '#E06C75', '#98C379', '#D19A66',
-    '#61AFEF', '#D19A66', '#56B6C2', '#ffffff',
+    '#20242c', '#ff5555', '#50fa7b', '#ffa733',
+    '#6272a4', '#ff79c6', '#8be9fd', '#666666',
+    '#999999', '#ff5555', '#50fa7b', '#ffa733',
+    '#668cff', '#ff79c6', '#8be9fd', '#ffffff',
 
     // The 6x6 color cubes...
     '#000000', '#00005F', '#000087', '#0000AF', '#0000D7', '#0000FF',
