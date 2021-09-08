@@ -12,6 +12,7 @@ var rxCharacteristic;
 var txCharacteristic;
 
 var connected = false;
+var privateKey = undefined;
 
 function connectionToggle() {
     if (connected) {
@@ -120,8 +121,85 @@ function onDisconnected() {
     setConnButtonState(false);
 }
 
+function hexToBytes(hex) {
+    for (var bytes = [], c = 0; c < hex.length; c += 2)
+        bytes.push(parseInt(hex.substr(c, 2), 16));
+    return bytes;
+}
+
+function pemToRawKey(pem) {
+    const pemHeader = "-----BEGIN PRIVATE KEY-----";
+    const pemFooter = "-----END PRIVATE KEY-----";
+    const pemContents = pem.trim().substring(pemHeader.length, pem.length - pemFooter.length);
+    const binaryDerString = window.atob(pemContents);
+    const binaryDer = new Uint8Array(48);
+    for (let i = 0, strLen = 48; i < strLen; i++) {
+        binaryDer[i] = binaryDerString.charCodeAt(35 + i);
+    }
+    return binaryDer;
+}
+
+async function challengeComputeAnswer(challenge) {
+    const parts = challenge.trim().replaceAll("[", "").replaceAll("]", "").split('_');
+    if (parts.length != 2) {
+        throw "Invalid challenge";
+    }
+    const header = parts[0];
+    const core = parts[1];
+
+    if ((header != "SPD") && (header != "SPP")) {
+        throw "Invalid challenge header " + header;
+    }
+    const coreBytes = hexToBytes(core);
+    if (coreBytes.length != 32) {
+        throw "Invalid challenge core";
+    }
+
+    const ec = new elliptic.ec('p384');
+    const key = ec.keyFromPrivate(privateKey);
+    const msgHash = hexToBytes(sha256(coreBytes));
+    const signature = ec.sign(msgHash, key, "hex", { canonical: true }).toDER();
+
+    const base64Signature = btoa(String.fromCharCode.apply(null, new Uint8Array(signature)));
+    var answer = "_" + base64Signature;
+    for (var i = 0; i < 150 - base64Signature.length; i++) {
+        answer += "@";
+    }
+    return answer;
+}
+
+function handleUnlock(line) {
+    const re = /s*\[KT-CLI\] Please unlock\s*$/gm;
+    if (line.match(re)) {
+        if (privateKey) {
+            window.term_.io.print("\x1b[1;33m" + "Attempting to unlock KT-CLI\n" + "\x1b[1;0m");
+            uartSendString("_jU9FJ5EE3TuxTX8Ak3dQyjUk\n");
+        } else {
+            window.term_.io.print("\x1b[1;31m" + "No private key provided to authentify to KT-CLI\n" + "\x1b[1;0m");
+        }
+    }
+}
+
+function handleAuthentication(line) {
+    const re = /s*\[\[[A-Z]{3}_[A-Za-z0-9]{64}\]\]\s$/gm;
+    if (line.match(re)) {
+        if (privateKey) {
+            window.term_.io.print("\x1b[1;33m" + "Attempting to authentify to KT-CLI\n" + "\x1b[1;0m");
+            challengeComputeAnswer(line).then(function (answer) {
+                uartSendString(answer);
+            })
+        } else {
+            window.term_.io.print("\x1b[1;31m" + "No private key provided to authentify to KT-CLI\n" + "\x1b[1;0m");
+        }
+    }
+}
+
+function handleAuthenticationIfNeeded(line) {
+    handleUnlock(line)
+    handleAuthentication(line);
+}
+
 function handleNotifications(event) {
-    console.log('notification');
     let value = event.target.value;
     // Convert raw data bytes to character values and use these to 
     // construct a string.
@@ -130,11 +208,12 @@ function handleNotifications(event) {
         str += String.fromCharCode(value.getUint8(i));
     }
     window.term_.io.print(str);
+
+    handleAuthenticationIfNeeded(str);
 }
 
 function uartSendString(s) {
     if (bleDevice && bleDevice.gatt.connected) {
-        console.log("send: " + s);
         let val_arr = new Uint8Array(s.length)
         for (let i = 0; i < s.length; i++) {
             let val = s[i].charCodeAt(0);
@@ -156,11 +235,6 @@ function sendNextChunk(a) {
         });
 }
 
-
-
-function initContent(io) {
-}
-
 function setupHterm() {
     const term = new hterm.Terminal();
 
@@ -170,7 +244,6 @@ function setupHterm() {
             uartSendString(string);
         };
         io.sendString = uartSendString;
-        initContent(io);
         this.setCursorVisible(true);
         this.keyboard.characterEncoding = 'raw';
     };
@@ -197,3 +270,36 @@ function setupHterm() {
 window.onload = function () {
     lib.init(setupHterm);
 };
+
+
+function allowDrop(ev) {
+    ev.preventDefault();
+}
+
+function drop(ev) {
+    ev.preventDefault();
+    var file = undefined;
+    if (ev.dataTransfer.items && ev.dataTransfer.items.length == 1) {
+        file = ev.dataTransfer.items[0].getAsFile();
+    } else if (ev.dataTransfer.files && ev.dataTransfer.files.length == 1) {
+        file = ev.dataTransfer.files[0].getAsFile();
+    }
+    readPemFile(file);
+}
+
+function readPemFile(file) {
+    if (!file) {
+        return;
+    }
+    var reader = new FileReader();
+    reader.onload = function (e) {
+        try {
+            privateKey = pemToRawKey(e.target.result.trim());
+            window.term_.io.print("\x1b[1;32m" + "Successfully loaded private key\n" + "\x1b[1;0m");
+        } catch (error) {
+            console.error(error);
+        }
+
+    };
+    reader.readAsText(file);
+}
