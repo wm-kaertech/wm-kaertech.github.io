@@ -14,6 +14,8 @@ var txCharacteristic;
 var connected = false;
 var privateKey = undefined;
 
+var txQueue = new Queue();
+
 function connectionToggle() {
     if (connected) {
         disconnect();
@@ -91,7 +93,7 @@ function connect() {
             setConnButtonState(true);
         })
         .catch(error => {
-            console.log('' + error);
+            console.error('' + error);
             window.term_.io.println('' + error);
             if (bleDevice && bleDevice.gatt.connected) {
                 bleDevice.gatt.disconnect();
@@ -201,8 +203,6 @@ function handleAuthenticationIfNeeded(line) {
 
 function handleNotifications(event) {
     let value = event.target.value;
-    // Convert raw data bytes to character values and use these to 
-    // construct a string.
     let str = "";
     for (let i = 0; i < value.byteLength; i++) {
         str += String.fromCharCode(value.getUint8(i));
@@ -219,19 +219,34 @@ function uartSendString(s) {
             let val = s[i].charCodeAt(0);
             val_arr[i] = val;
         }
-        sendNextChunk(val_arr);
+        sendNextString(val_arr);
     } else {
         window.term_.io.println('Not connected to a device yet.');
     }
 }
 
-function sendNextChunk(a) {
-    let chunk = a.slice(0, MTU);
+function sendNextString(string) {
+    while (string.length > 0) {
+        let chunk = string.slice(0, MTU);
+        txQueue.enqueue(chunk);
+        if (txQueue.getLength() == 1) {
+            txNextChunk();
+        }
+        string = string.slice(chunk.length);
+    }
+}
+
+function txNextChunk() {
+    var chunk = txQueue.peek();
     rxCharacteristic.writeValue(chunk)
         .then(function () {
-            if (a.length > MTU) {
-                sendNextChunk(a.slice(MTU));
+            txQueue.dequeue();
+            if (!txQueue.isEmpty()) {
+                setTimeout(function () { txNextChunk(); }, 500);
             }
+        })
+        .catch(error => {
+            console.error('' + error);
         });
 }
 
@@ -249,15 +264,6 @@ function setupHterm() {
     };
     term.decorate(document.querySelector('#terminal'));
     term.installKeyboard();
-
-    term.contextMenu.setItems([
-        ['Terminal Reset', () => { term.reset(); initContent(window.term_.io); }],
-        ['Terminal Clear', () => { term.clearHome(); }],
-        [hterm.ContextMenu.SEPARATOR],
-        ['GitHub', function () {
-            lib.f.openWindow('https://github.com/makerdiary/web-device-cli', '_blank');
-        }],
-    ]);
 
     term.prefs_.set('cursor-color', 'white')
     term.prefs_.set('font-size', 12)
